@@ -364,7 +364,16 @@ export default function ProductsPage() {
                 </button>
               </td>
               <td>{p.price}</td>
-              <td>{p.stock}</td>
+              <td
+                style={{
+                  backgroundColor: p.stock === 0 ? "#87CEFA" : "transparent",
+                }}
+              >
+                {p.stock}
+                {p.stock === 0 && (
+                  <span style={{ marginLeft: 6, fontSize: 12 }}>(재고없음)</span>
+                )}
+              </td><td>{p.stock}</td>
               <td>{String(p.deleted)}</td>
               <td>
                 <button onClick={() => remove(p.productId)}>Delete</button>
