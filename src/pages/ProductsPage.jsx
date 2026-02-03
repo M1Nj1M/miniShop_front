@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 
 export default function ProductsPage() {
+  const size = 10;
+
   const [products, setProducts] = useState([]);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
 
   // 상품 수정 button event
@@ -22,16 +25,22 @@ export default function ProductsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", price: 0, stock: 0 });
 
+  // 페이징 처리
+  const [totalPages, setTotalPages] = useState(0);
+
   // ----
 
-  const load = async () => {
-    const res = await api.get("/products");
-    setProducts(res.data);
+  const load = async (p = page) => {
+    const res = await api.get("/products", { params: { page: p, size } });
+
+    setProducts(res.data.content ?? []);
+    setTotalPages(res.data.totalPages ?? 0);
+    setPage(res.data.number ?? p);
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    load(page);
+  }, [page]);
 
   const remove = async (productId) => {
     if (!confirm("상품을 삭제하시겠습니까?")) return;
@@ -169,6 +178,153 @@ export default function ProductsPage() {
           상품 추가
         </button>
       </div>
+
+      <br />
+
+      <table border="1" cellPadding="6" style={{ borderCollapse: "collapse" }}>
+        <thead>
+          <tr>
+            <th>상품 ID</th>
+            <th>상품명</th>
+            <th>가격</th>
+            <th>재고</th>
+            <th>삭제여부</th>
+            <th>삭제</th>
+          </tr>
+        </thead>
+        <tbody>
+          {products.map((p) => (
+            <tr key={p.productId}>
+              <td>{p.productId}</td>
+              <td>
+                <button
+                  type="button"
+                  onClick={() => openEdit(p)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    color: "blue",
+                    textDecoration: "underline",
+                    cursor: "pointer",
+                  }}
+                >
+                  {p.name}
+                </button>
+              </td>
+              <td>{p.price}</td>
+              <td
+                style={{
+                  backgroundColor: p.stock === 0 ? "#87CEFA" : "transparent",
+                }}
+              >
+                {p.stock}
+                {p.stock === 0 && (
+                  <span style={{ marginLeft: 6, fontSize: 12 }}>(재고없음)</span>
+                )}
+              </td>
+              <td>{String(p.deleted)}</td>
+              <td>
+                <button onClick={() => remove(p.productId)}>Delete</button>
+              </td>
+            </tr>
+          ))}
+          {products.length === 0 && (
+            <tr>
+              <td colSpan="6" style={{ textAlign: "center" }}>
+                empty
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {/* 페이징 버튼 */}
+      <div style={{ marginTop: 12, display: "flex", gap: 6, alignItems: "center" }}>
+        <button disabled={page === 0} onClick={() => setPage(page - 1)}>Prev</button>
+        {Array.from({ length: totalPages }, (_, i) => (
+          <button key={i} onClick={() => setPage(i)}>{i + 1}</button>
+        ))}
+        <button disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>Next</button>
+        <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.7 }}>
+          {page + 1} / {totalPages}
+        </span>
+      </div>
+
+      {/* 상품 수정 모달 */}
+      {editOpen && (
+        <div
+          onClick={closeEdit}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.3)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 360,
+              background: "white",
+              borderRadius: 8,
+              padding: 16,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+            }}
+          >
+            <h4 style={{ marginTop: 0 }}>상품 수정</h4>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <label>
+                이름:
+                <input
+                  name="name"
+                  value={editForm.name}
+                  onChange={onEditChange}
+                  style={{ width: "100%" }}
+                />
+              </label>
+
+              <label>
+                가격:
+                <input
+                  name="price"
+                  type="number"
+                  value={editForm.price}
+                  onChange={onEditChange}
+                  style={{ width: "100%" }}
+                />
+              </label>
+
+              <label>
+                재고:
+                <input
+                  name="stock"
+                  type="number"
+                  value={editForm.stock}
+                  onChange={onEditChange}
+                  style={{ width: "100%" }}
+                />
+              </label>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                marginTop: 12,
+                justifyContent: "flex-end",
+              }}
+            >
+              <button onClick={closeEdit}>취소</button>
+              <button onClick={updateProduct}>확인</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 삭제된 상품 조회 모달 */}
       {deletedOpen && (
@@ -325,141 +481,6 @@ export default function ProductsPage() {
               <button onClick={createFromModal} disabled={loading}>
                 확인
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <br />
-
-      <table border="1" cellPadding="6" style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th>상품 ID</th>
-            <th>상품명</th>
-            <th>가격</th>
-            <th>재고</th>
-            <th>삭제여부</th>
-            <th>삭제</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map((p) => (
-            <tr key={p.productId}>
-              <td>{p.productId}</td>
-              <td>
-                <button
-                  type="button"
-                  onClick={() => openEdit(p)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    color: "blue",
-                    textDecoration: "underline",
-                    cursor: "pointer",
-                  }}
-                >
-                  {p.name}
-                </button>
-              </td>
-              <td>{p.price}</td>
-              <td
-                style={{
-                  backgroundColor: p.stock === 0 ? "#87CEFA" : "transparent",
-                }}
-              >
-                {p.stock}
-                {p.stock === 0 && (
-                  <span style={{ marginLeft: 6, fontSize: 12 }}>(재고없음)</span>
-                )}
-              </td><td>{p.stock}</td>
-              <td>{String(p.deleted)}</td>
-              <td>
-                <button onClick={() => remove(p.productId)}>Delete</button>
-              </td>
-            </tr>
-          ))}
-          {products.length === 0 && (
-            <tr>
-              <td colSpan="6" style={{ textAlign: "center" }}>
-                empty
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-
-      {/* 상품 수정 모달 */}
-      {editOpen && (
-        <div
-          onClick={closeEdit}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.3)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 999,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 360,
-              background: "white",
-              borderRadius: 8,
-              padding: 16,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-            }}
-          >
-            <h4 style={{ marginTop: 0 }}>상품 수정</h4>
-
-            <div style={{ display: "grid", gap: 8 }}>
-              <label>
-                이름:
-                <input
-                  name="name"
-                  value={editForm.name}
-                  onChange={onEditChange}
-                  style={{ width: "100%" }}
-                />
-              </label>
-
-              <label>
-                가격:
-                <input
-                  name="price"
-                  type="number"
-                  value={editForm.price}
-                  onChange={onEditChange}
-                  style={{ width: "100%" }}
-                />
-              </label>
-
-              <label>
-                재고:
-                <input
-                  name="stock"
-                  type="number"
-                  value={editForm.stock}
-                  onChange={onEditChange}
-                  style={{ width: "100%" }}
-                />
-              </label>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginTop: 12,
-                justifyContent: "flex-end",
-              }}
-            >
-              <button onClick={closeEdit}>취소</button>
-              <button onClick={updateProduct}>확인</button>
             </div>
           </div>
         </div>

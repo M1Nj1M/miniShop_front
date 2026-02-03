@@ -2,23 +2,17 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 
 export default function OrdersPage() {
-  const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
-  // 상품 이름 호출
-  const productNameById = new Map(products.map((p) => [p.productId, p.name]));
-
-  const loadProducts = async () => {
-    const res = await api.get("/products");
-    setProducts(res.data);
-  };
+  const [loading, setLoading] = useState(false);
 
   const loadOrders = async () => {
-    const res = await api.get("/orders");
-    setOrders(res.data);
-  };
-
-  const loadAll = async () => {
-    await Promise.all([loadProducts(), loadOrders()]);
+    setLoading(true);
+    try {
+      const res = await api.get("/orders"); // 백엔드: /api/orders
+      setOrders(res.data ?? []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 주문 상태 -> 한국어 표시
@@ -30,31 +24,26 @@ export default function OrdersPage() {
   // 주문 날짜 포맷
   const formatKoreanDateTime = (isoString) => {
     if (!isoString) return "";
-
     const d = new Date(isoString);
-    if (Number.isNaN(d.getTime())) return isoString;
+    if (Number.isNaN(d.getTime())) return String(isoString);
 
     const pad2 = (n) => String(n).padStart(2, "0");
-
     const y = d.getFullYear();
     const m = pad2(d.getMonth() + 1);
     const day = pad2(d.getDate());
     const hh = pad2(d.getHours());
     const mm = pad2(d.getMinutes());
-
     return `${y}년 ${m}월 ${day}일 ${hh}시 ${mm}분`;
   };
 
   useEffect(() => {
-    (async () => {
-      await loadAll();
-    })();
+    loadOrders();
   }, []);
 
   const cancel = async (orderId) => {
     try {
       await api.post(`/orders/${orderId}/cancel`);
-      await loadAll();
+      await loadOrders();
     } catch (e) {
       alert(e?.response?.data?.message ?? "cancel failed");
     }
@@ -64,12 +53,14 @@ export default function OrdersPage() {
     <div>
       <h3>주문 Orders</h3>
 
+      {loading && <div style={{ margin: "8px 0" }}>loading...</div>}
+
       <table border="1" cellPadding="6" style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr>
             <th>주문 ID</th>
             <th>상품명</th>
-            <th>재고</th>
+            <th>수량</th>
             <th>상태</th>
             <th>주문날짜</th>
             <th>Action</th>
@@ -79,9 +70,7 @@ export default function OrdersPage() {
           {orders.map((o) => (
             <tr key={o.orderId}>
               <td>{o.orderId}</td>
-              <td>
-                {productNameById.get(o.productId) ?? `상품#${o.productId}`}
-              </td>
+              <td>{o.productName ?? `상품#${o.productId}`}</td>
               <td>{o.quantity}</td>
               <td>{ORDER_STATUS_KR[o.status] ?? o.status}</td>
               <td>{formatKoreanDateTime(o.createdAt)}</td>
@@ -94,7 +83,8 @@ export default function OrdersPage() {
               </td>
             </tr>
           ))}
-          {orders.length === 0 && (
+
+          {orders.length === 0 && !loading && (
             <tr>
               <td colSpan="6" style={{ textAlign: "center" }}>
                 empty

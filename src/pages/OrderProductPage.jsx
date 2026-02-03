@@ -3,8 +3,7 @@ import { api } from "../api/client";
 
 export default function OrderProductPage() {
   const [products, setProducts] = useState([]);
-  const [selected, setSelected] = useState(null); // 선택된 상품 객체
-  const quantity = 1;
+  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // 프론트 페이징 상태
@@ -12,27 +11,30 @@ export default function OrderProductPage() {
   const [page, setPage] = useState(1);
 
   const loadProducts = async () => {
-    const res = await api.get("/products");
-    setProducts(res.data);
+    const res = await api.get("/products", { params: { page: 0, size: 9999 } });
+    const data = res.data;
+
+    const list = Array.isArray(data) ? data : (data?.content ?? []);
+    setProducts(list);
+    return list; // 주문 후 selected 갱신에 사용
   };
 
   useEffect(() => {
-    (async () => {
-      await loadProducts();
-    })();
+    loadProducts().catch((e) => {
+      console.error(e);
+      alert(e?.response?.data?.message ?? "products load failed");
+    });
   }, []);
 
   const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
 
-  // page 바뀔 때 범위 밖이면 보정
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  //  현재 page가 totalPages를 넘으면 보정
+  const safePage = Math.min(Math.max(1, page), totalPages);
 
   const pagedProducts = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
+    const start = (safePage - 1) * PAGE_SIZE;
     return products.slice(start, start + PAGE_SIZE);
-  }, [products, page]);
+  }, [products, safePage]);
 
   const orderOne = async () => {
     if (!selected) return alert("상품을 선택해주세요");
@@ -42,18 +44,16 @@ export default function OrderProductPage() {
     try {
       await api.post("/orders", {
         productId: selected.productId,
-        quantity: Number(quantity),
+        quantity: 1,
       });
 
       alert("주문이 완료되었습니다");
 
-      // 재고 반영 위해 reload
-      await loadProducts();
-
-      // reload 후 선택 상품도 최신으로 갱신
+      //  재고 반영 위해 reload + reload 결과(list)로 selected 갱신
+      const list = await loadProducts();
       setSelected((prev) => {
         if (!prev) return null;
-        const fresh = products.find((p) => p.productId === prev.productId);
+        const fresh = list.find((p) => p.productId === prev.productId);
         return fresh ?? prev;
       });
     } catch (e) {
@@ -64,6 +64,11 @@ export default function OrderProductPage() {
   };
 
   const isSelected = (p) => selected?.productId === p.productId;
+
+  const goToPage = (next) => {
+    const safe = Math.min(Math.max(1, next), totalPages);
+    setPage(safe);
+  };
 
   return (
     <div>
@@ -113,7 +118,7 @@ export default function OrderProductPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)", // ✅ 1열에 4개
+          gridTemplateColumns: "repeat(4, 1fr)",
           gap: 12,
         }}
       >
@@ -124,8 +129,8 @@ export default function OrderProductPage() {
             onClick={() => setSelected(p)}
             disabled={p.stock === 0}
             style={{
-              aspectRatio: "1 / 1", // ✅ 정사각형
-              border: "2px solid black", // ✅ 검정 테두리
+              aspectRatio: "1 / 1",
+              border: "2px solid black",
               background: isSelected(p) ? "#f0f0f0" : "white",
               cursor: p.stock === 0 ? "not-allowed" : "pointer",
               opacity: p.stock === 0 ? 0.5 : 1,
@@ -146,6 +151,12 @@ export default function OrderProductPage() {
             </div>
           </button>
         ))}
+
+        {pagedProducts.length === 0 && (
+          <div style={{ gridColumn: "1 / -1", textAlign: "center" }}>
+            상품이 없습니다
+          </div>
+        )}
       </div>
 
       {/* 페이징 */}
@@ -158,29 +169,26 @@ export default function OrderProductPage() {
           justifyContent: "center",
         }}
       >
-        <button onClick={() => setPage(1)} disabled={page === 1}>
+        <button onClick={() => goToPage(1)} disabled={safePage === 1}>
           {"<<"}
         </button>
-        <button
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={page === 1}
-        >
+        <button onClick={() => goToPage(safePage - 1)} disabled={safePage === 1}>
           {"<"}
         </button>
 
         <span>
-          {page} / {totalPages}
+          {safePage} / {totalPages}
         </span>
 
         <button
-          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          disabled={page === totalPages}
+          onClick={() => goToPage(safePage + 1)}
+          disabled={safePage === totalPages}
         >
           {">"}
         </button>
         <button
-          onClick={() => setPage(totalPages)}
-          disabled={page === totalPages}
+          onClick={() => goToPage(totalPages)}
+          disabled={safePage === totalPages}
         >
           {">>"}
         </button>
